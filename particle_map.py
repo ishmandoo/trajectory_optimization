@@ -5,53 +5,71 @@ import matplotlib.pyplot as plt
 from scipy import optimize
 
 n = 200
-xs = [0] * n
-target_xs = torch.FloatTensor([1] * 100 + [0] * (n-100))
-vs = [0] * n
-fs = torch.linspace(0,0,n, requires_grad=True)
+pos_target = torch.FloatTensor([10.,10.])
+vs = torch.FloatTensor([[0.1,0.11 ] ]* n)
+vs.requires_grad_()
+dt = 0.1
 
 
-def update_xs(fs):
-	vs_new = torch.cumsum(fs, dim=0)
-	xs_new = torch.cumsum(vs_new, dim=0)
-	return xs_new, vs_new
+def update_poss(test_vs):
+	poss = torch.zeros([n,2])
+	for i in range(1, n):
+		old_pos = poss[i-1,:].clone()
+		v = test_vs[i-1,:].clone()
+		#poss[i,:] = old_pos + dt * (v/torch.norm(v)) * (old_pos[0]+1)
+		#print(int(not (old_pos[0] < 6 and old_pos[0]  >4 and old_pos[1] < 6 and old_pos[1] > 4)))
 
-fig = plt.figure()
-plt.autoscale(tight=True)
-ax = fig.add_subplot(111)
-ax.autoscale(enable=True, axis="y", tight=False)
+		if (torch.norm(v) > 1.):
+			v = (v.clone()/torch.norm(v.clone()))
+		poss[i,:] = old_pos + dt * v  * float(not (old_pos[0] < 6 and old_pos[0]  >4 and old_pos[1] < 7 and old_pos[1] > 5))
+	return poss
 
 
-li1, = ax.plot(xs)
-li2, = ax.plot(vs)
-li3, = ax.plot(fs.detach().numpy())
+poss = update_poss(vs)
+
+fig = plt.figure(figsize=(10,4))
+ax1 = fig.add_subplot(131)
+ax1.autoscale(enable=True, axis="xy")
+
+li1, = ax1.plot(poss[:,0].detach().numpy(),poss[:,1].detach().numpy(),'.')
+
+ax2 = fig.add_subplot(132)
+ax2.autoscale(enable=True)
+
+li2, = ax2.plot(vs[:-1,0].detach().numpy())
+
+
+ax3 = fig.add_subplot(133)
+ax3.autoscale(enable=True)
+li3, = ax3.plot(vs[:-1,1].detach().numpy())
 
 fig.canvas.draw()
 plt.show(block=False)
+#optimizer =  torch.optim.SGD([ts], lr=0.0000000001, momentum=0.9, nesterov=True)
+optimizer = torch.optim.Adam([vs])
 
-#optimizer =  torch.optim.SGD([fs], lr=0.000000005, momentum=0.9, nesterov=True)
-optimizer = torch.optim.Adam([fs])
-
-
-
-lr = 0.000001 # learning rate
 while True:
-	xs, vs = update_xs(fs)
-	#print(xs, vs)
-	cost = torch.sum((xs - target_xs).pow(2) + fs.pow(2))
+	poss = update_poss(vs)
+	cost = torch.norm(poss[-1,:] - pos_target)
 	optimizer.zero_grad()
- 	cost.backward()
- 
+	cost.backward(retain_graph=False)
 
 	# update plots
-	li1.set_ydata(xs.detach().numpy())
-	li2.set_ydata(vs.detach().numpy())
-	li3.set_ydata(fs.detach().numpy())
-	ax.relim()
+	li1.set_xdata(poss.detach().numpy()[:,0])
+	li1.set_ydata(poss.detach().numpy()[:,1])
+	li2.set_ydata(vs.detach().numpy()[:-1,0])
+	li3.set_ydata(vs.detach().numpy()[:-1,1])
+	ax1.relim()
+	ax2.relim()
+	ax3.relim()
 	# update ax.viewLim using the new dataLim
-	ax.autoscale_view()
+	ax1.autoscale_view()
+	ax2.autoscale_view()
+	ax3.autoscale_view()
 
 	fig.canvas.draw()
 
+
 	# update wire heights
- 	optimizer.step()
+	optimizer.step()
+ 	
